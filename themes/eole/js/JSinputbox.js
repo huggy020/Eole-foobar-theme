@@ -208,7 +208,10 @@ oInputbox = function (w, h, default_text, empty_text, textcolor, backcolor, bord
 		this.anchor = this.Cpos;
 		this.SelBegin = this.Cpos;
 		this.SelEnd = this.Cpos;
-		this.resetCursorTimer();		
+		this.resetCursorTimer();
+	}
+	this.isActive = function (){
+		return this.edit;
 	}
     this.check = function (callback, x, y, force_activate) {
 		force_activate = typeof force_activate !== 'undefined' ? force_activate : false;		
@@ -295,9 +298,9 @@ oInputbox = function (w, h, default_text, empty_text, textcolor, backcolor, bord
                 }
                 // Set Mouse Cursor Style
 				if(this.hover || this.drag) {
-					window.SetCursor(IDC_IBEAM);		
+					g_cursor.setCursor(IDC_IBEAM,'inputbox');		
 				} else if(this.ibeam_set) {
-					window.SetCursor(IDC_ARROW);
+					g_cursor.setCursor(IDC_ARROW,5);
 				}
 				this.ibeam_set = (this.hover || this.drag);
                 break;
@@ -803,7 +806,7 @@ oInputbox = function (w, h, default_text, empty_text, textcolor, backcolor, bord
             }
             this.repaint();
     	}
-        
+
         // autosearch: has text changed after on_key or on_char ?
 		if(autovalidate) {
 			if(this.text != this.prev_text) {                      

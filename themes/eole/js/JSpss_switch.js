@@ -1,36 +1,19 @@
 var settings_file_not_found = false;
-
-/*var SettingsPath = data_global_path+"\\"+theme_name+"-settings\\";
-gTime_covers = fb.CreateProfiler();			
-gTime_covers.Reset();
-console.log("pss_switch 0 time:"+gTime_covers.Time);	
-
-var settings_files = utils.Glob(SettingsPath+"*.*");
-var PSS_settings = Array();
-for(i=0; i < settings_files.length; i++) {
-	filename = settings_files[i];
 	
-	let arr = utils.FileTest(settings_files[i], "split");
-	filename = arr[1];
-
-	last_underscore = filename.lastIndexOf('_');
-	setting_value = filename.substring(0,last_underscore + 1);		
-	setting_name = filename.substring(last_underscore + 1);
-	PSS_settings[setting_name] = setting_value; 
-}
-console.log("pss_switch 1 time:"+gTime_covers.Time);*/
-	
-oPanelSetting = function (name, file_prefix, default_value, min_value, max_value) {
+oPanelSetting = function (name, file_prefix, default_value, min_value, max_value, int_value, update_settings_file_not_found) {
 	this.name = name;	
 	this.file_prefix = file_prefix;
 	this.default_value = default_value;
 	this.max_value = max_value;
 	this.min_value = min_value;	
+	this.int_value = typeof int_value !== 'undefined' ? int_value : true;	
+	this.update_settings_file_not_found = typeof update_settings_file_not_found !== 'undefined' ? update_settings_file_not_found : true;	
 	this.getFileValue = function () {		
 		setting_file = utils.Glob(SettingsPath+""+this.file_prefix+"*");
 		if(setting_file.length>=1){
 			last_underscore = setting_file[0].lastIndexOf('_');
-			this.value = parseInt(setting_file[0].substring(last_underscore + 1));
+			this.value = setting_file[0].substring(last_underscore + 1);
+			if(this.int_value) this.value = parseInt(this.value);
 			if(setting_file.length>1){
 				for(i=1;i<setting_file.length;i++) {
 					g_files.DeleteFile(setting_file[i]);
@@ -39,30 +22,38 @@ oPanelSetting = function (name, file_prefix, default_value, min_value, max_value
 		} else {
 			this.value = this.default_value;
 			g_files.CreateTextFile(SettingsPath+this.file_prefix+this.value, true).Close();
-			settings_file_not_found = true;	
+			if(this.update_settings_file_not_found) {
+				settings_file_not_found = true;	
+			}
 		}
 		return this.value;
     };
+	this.getValue = function () {		
+		return this.value;
+	}	
 	this.getNumberOfState = function () {
 		return (this.max_value-this.min_value);
 	}	
-	this.setValue = function (new_value) {	
+	this.setValue = function (new_value, refresh_panel) {	
+		refresh_panel = typeof refresh_panel !== 'undefined' ? refresh_panel : true;	
 		if(new_value==this.value) return;
 		if(new_value>this.max_value) new_value = this.max_value;
 		else if(new_value<this.min_value) new_value = this.min_value;		
 		if(g_files.FileExists(SettingsPath+this.file_prefix+new_value)) g_files.DeleteFile(SettingsPath+this.file_prefix+new_value);
 		if(!g_files.FileExists(SettingsPath+this.file_prefix+this.value)) g_files.CreateTextFile(SettingsPath+this.file_prefix+this.value, true).Close();	
 		g_files.MoveFile(SettingsPath + this.file_prefix + this.value,SettingsPath + this.file_prefix + new_value);
-
+		g_avoid_on_metadb_changed = true;
 		this.value = new_value;
+		window.NotifyOthers("g_avoid_on_metadb_changed",true);			
 		window.NotifyOthers(this.name,this.value);	
-		
-		RefreshPSS();
-		
+		if(refresh_panel!==false) RefreshPSS();
 	}
-	this.toggleValue = function () {
-		if(this.value==0) this.setValue(1);
-		else this.setValue(0);
+	this.setDefault = function () {
+		this.setValue(this.default_value);
+	}	
+	this.toggleValue = function (refresh_panel) {
+		if(this.value==0) this.setValue(1, refresh_panel);
+		else this.setValue(0, refresh_panel);
 	}
 	this.isEqual = function (test_value) {
 		return (this.value==test_value);
@@ -82,6 +73,16 @@ oPanelSetting = function (name, file_prefix, default_value, min_value, max_value
 	this.increment = function (increment_value) {
 		this.setValue(parseInt(this.value)+increment_value);		
 	}	
+	this.cycleIncrement = function (increment_value, refresh_panel) {
+		var new_value = parseInt(this.value)+increment_value;
+		if(new_value>this.max_value) new_value = this.min_value;
+		this.setValue(new_value, refresh_panel);		
+	}	
+	this.cycleDecrement = function (decrement_value, refresh_panel) {
+		var new_value = parseInt(this.value)-decrement_value;
+		if(new_value<this.min_value) new_value = this.max_value;
+		this.setValue(new_value, refresh_panel);		
+	}	
 	this.userInputValue = function (msg,title) {
 		try {
 			new_value = utils.InputBox(window.ID, msg, title, this.value, true);
@@ -93,17 +94,33 @@ oPanelSetting = function (name, file_prefix, default_value, min_value, max_value
 	}		
 	this.getFileValue();
 }
-const refreshPSS_async = async() =>
-{
+function RefreshPSS() {
 	if (fb.IsPlaying || fb.IsPaused) {
-		fb.PlayOrPause();
-		fb.PlayOrPause();
+		try{
+			let handle = fb.GetNowPlaying();
+			handle.RefreshStats();
+		} catch(e){
+			fb.Play();fb.Stop();
+		}
+	}	
+	else {
+		fb.Play();fb.Stop();
+	}	
+}	
+function RefreshPSS_old() {
+	if (fb.IsPaused) {
+		fb.Play();
+		fb.Pause();
 	}
+	else if (fb.IsPlaying) {
+		fb.Pause();
+		fb.Play();
+	}	
 	else {
 		fb.Play();fb.Stop();
 	}
-};
-function RefreshPSS() {
+}
+function RefreshPSS_old2() {
 	if (fb.IsPlaying || fb.IsPaused) {
 		fb.PlayOrPause();
 		fb.PlayOrPause();
@@ -113,7 +130,6 @@ function RefreshPSS() {
 	}
 }
 
-
 var main_panel_state = new oPanelSetting("main_panel_state", "MAINPANEL_", 0, 0, 3);
 var layout_state = new oPanelSetting("layout_state", "LAYOUT_", 0, 0, 1);
 
@@ -121,11 +137,12 @@ var darkplaylist_state = new oPanelSetting("darkplaylist_state", "DARKPLAYLIST_"
 var showtrackinfo_big = new oPanelSetting("showtrackinfo_big", "SHOWTRACKINFOBIG_", 1, 0, 1);
 var showtrackinfo_small = new oPanelSetting("showtrackinfo_small", "SHOWTRACKINFOSMALL_", 0, 0, 1);
 
-var coverpanel_state = new oPanelSetting("coverpanel_state", "COVERPANEL_", 1, 0, 1);
-var filters_panel_state = new oPanelSetting("filters_panel_state", "FILTERSPANEL_", 1, 0, 3);
+var coverpanel_state_mini = new oPanelSetting("coverpanel_state_mini", "COVERPANELMINI_", 1, 0, 1);
+var coverpanel_state_big = new oPanelSetting("coverpanel_state_big", "COVERPANELBIG_", 1, 0, 1);
+var filters_panel_state = new oPanelSetting("filters_panel_state", "FILTERSPANEL_", 1, 0, 5);
 var libraryfilter_state = new oPanelSetting("libraryfilter_state", "LIBRARYFILTER_", 1, 0, 1);
 var screensaver_state = new oPanelSetting("screensaver_state", "SCREENSAVER_", 0, 0, 1);
-var lyrics_state = new oPanelSetting("lyrics_state", "LYRICS_", 1, 0, 4);
+var lyrics_state = new oPanelSetting("lyrics_state", "LYRICS_", 1, 0, 5);
 var librarytree = new oPanelSetting("librarytree", "LIBRARYTREE_", 0, 0, 1);
 var mini_controlbar = new oPanelSetting("mini_controlbar", "MINICONTROLBAR_", 1, 0, 1);
 var compact_titlebar = new oPanelSetting("compacttitlebar", "COMPACTTITLEBAR_", 0, 0, 1);
@@ -141,10 +158,20 @@ var nowplayingplaylist_state = new oPanelSetting("nowplayingplaylist_state", "NO
 var nowplayingbio_state = new oPanelSetting("nowplayingbio_state", "NOWPLAYINGBIO_", 1, 0, 1);
 var nowplayingvisu_state = new oPanelSetting("nowplayingvisu_state", "NOWPLAYINGVISU_", 1, 0, 1);
 
+//Track infos switch for each main panels
+var trackinfoslib_state = new oPanelSetting("trackinfoslib_state", "TRACKINFOSLIB_", 0, 0, 2);
+var trackinfosplaylist_state = new oPanelSetting("trackinfosplaylist_state", "TRACKINFOSPLAYLIST_", 0, 0, 2);
+var trackinfosbio_state = new oPanelSetting("trackinfosbio_state", "TRACKINFOSBIO_", 1, 0, 2);
+var trackinfosvisu_state = new oPanelSetting("trackinfosvisu_state", "TRACKINFOSVISU_", 1, 0, 2);
+var trackinfostext_state = new oPanelSetting("trackinfostext_state", "TRACKINFOSTEXT_", 1, 0, 1);
+
 //Panels width
 var libraryfilter_width = new oPanelSetting("libraryfilter_width", "LIBRARYFILTERWIDTH_", 210, 100, 900);
 var playlistpanel_width = new oPanelSetting("playlistpanel_width", "PLAYLISTPANELWIDTH_", 180, 100, 900);
-var rightplaylist_width = new oPanelSetting("rightplaylist_width", "RIGHTPLAYLISTWIDTH_", 270, 100, 900);
+var rightplaylist_width = new oPanelSetting("rightplaylist_width", "RIGHTPLAYLISTWIDTH_", 210, 100, 900);
+
+//Theme version
+var theme_version = new oPanelSetting("theme_version", "THEMEVERSION_", "0", 0, 0, false, false);
 
 //Get Now playing state according to main panel
 function getNowPlayingState(){
@@ -163,8 +190,44 @@ function getNowPlayingState(){
 		break;		
 	}	
 }
+//Get Track Infos state according to main panel
+function getTrackInfosState(){
+	switch(main_panel_state.value){
+		case 0:
+			return trackinfoslib_state.value;
+		break;
+		case 1:
+			return trackinfosplaylist_state.value;
+		break;
+		case 2:
+			return trackinfosbio_state.value;
+		break;
+		case 3:
+			return trackinfosvisu_state.value;
+		break;		
+	}	
+}
+function getTrackInfosVisibility(){
+	switch(main_panel_state.value){
+		case 0:
+			return (trackinfoslib_state.value>=1 && nowplayinglib_state.value==1);
+		break;
+		case 1:
+			return (trackinfosplaylist_state.value>=1 && nowplayingbio_state.value==1);
+		break;
+		case 2:
+			return (trackinfosbio_state.value>=1 && nowplayinglib_state.value==1);
+		break;
+		case 3:
+			return (trackinfosvisu_state.value>=1 && nowplayingvisu_state.value==1);
+		break;		
+	}	
+}
+function getRightPlaylistState(){
+	return (nowplayinglib_state.isActive());
+	//return (!trackinfoslib_state.isActive() && nowplayinglib_state.isActive());
+}
 
-// console.log("pss_switch 2 time:"+gTime_covers.Time);	
 // Example of use in a PSS :
 // The first line set a panel stack global variable according to the panel current state, the second line switch the visibility of a panel named library, it show the panel when the current state is 3
 // $set_ps_global(MAIN_PANEL_SWITCH,$right($findfile(themes/eole/Settings/MAINPANEL_*),1))
